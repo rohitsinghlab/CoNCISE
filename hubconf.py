@@ -1,5 +1,5 @@
 import torch
-from concise_dev.model.concise import Concise
+from concise.model.concise import Concise
 
 
 def pretrained_concise_v1(pretrained = True, progress = True):
