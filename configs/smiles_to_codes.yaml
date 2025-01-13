@@ -1,0 +1,24 @@
+prefix: data/DrugsMini
+ligand_file: ${prefix}/smiles.csv
+save_path: ${prefix}/codes.csv
+save_as_sqlite: True
+
+
+device:
+  _target_: torch.device
+  device: 0
+
+
+
+dataset:
+  lig_embed_file: ${..prefix}/ligands.h5
+  ligand_dataset:
+    _target_: concise.dataset.LigandDataset
+    lig_file: ${ligand_file}
+    lig_embed_file: ${..lig_embed_file}
+  ligand_dataloader:
+    _target_: torch.utils.data.DataLoader
+    dataset: ${..ligand_dataset}
+    batch_size: 32
+    num_workers: 4
+    shuffle: false

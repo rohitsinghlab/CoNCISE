@@ -1,0 +1,16 @@
+# Description: Configuration file for the query module
+# Parameters:
+#     prefix: str: the path where data is stored
+#     codes_file: str: the path to the codes file (output of smiles_to_codes in either csv or sqlite format) 
+#     protein_scores_file: str: the path to the protein scores file (output of proteins_to_codes)
+#     save_path: str: the path to save the assignments file
+prefix: data/QueryDrugsMini
+codes_file: data/DrugsMini/codes.sqlite
+protein_scores_file: data/SwissProtMini/scores.csv
+save_path: ${prefix}/assignments.csv
+
+
+
+# Search Parameters
+num_codes_per_protein: 10
+num_smiles_per_code: 20

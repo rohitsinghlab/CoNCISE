@@ -1,0 +1,48 @@
+# 1. fasta_file: the path to the fasta file
+fasta_file: data/SwissProtMini/seqs.fasta
+# 2. rec_embed_file: the path to create/load the receptor embeddings
+rec_embed_file: data/SwissProtMini/receptors.h5
+# 3. ligand_file: the path to the ligand file
+ligand_file: data/DrugsMini/smiles.csv
+# 4. lig_embed_file: the path to create/load ligand embeddings
+lig_embed_file: data/DrugsMini/ligands.h5
+# 5. save location 
+save_path: data/QueryDrugsMini/scores.csv
+# 6. Search Parameters
+num_codes_per_protein: 10
+num_smiles_per_code: 20
+# 7. device: the device to run the model on
+device:
+  _target_: torch.device
+  device: 0
+
+
+
+protein_dataset:
+  rec_embed_file: ${..rec_embed_file}
+  fasta_file: ${..fasta_file}
+  protein_dataset:
+    _target_: concise.dataset.ScoreFastaDataset
+    fasta_file: ${..fasta_file}
+    rec_embed_file: ${..rec_embed_file}
+    max_entries: -1
+  protein_dataloader:
+    _target_: torch.utils.data.DataLoader
+    dataset: ${..protein_dataset}
+    batch_size: 1
+    num_workers: 2
+    shuffle: false
+
+ligand_dataset:
+  lig_embed_file: ${..lig_embed_file}
+  ligand_dataset:
+    _target_: concise.dataset.LigandDataset
+    lig_file: ${ligand_file}
+    lig_embed_file: ${..lig_embed_file}
+  ligand_dataloader:
+    _target_: torch.utils.data.DataLoader
+    dataset: ${..ligand_dataset}
+    batch_size: 32
+    num_workers: 4
+    shuffle: false
+
