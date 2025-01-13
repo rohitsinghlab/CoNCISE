@@ -85,12 +85,12 @@ The CoNCISE DTI pipeline consists of the following three steps:
 2. Take any protein and find its binding affinity against all $32^3$ possible codes (figure 2 above).
 3. Use 2 and 3 to find protein-drug pairs with high binding affinity.
 
-All these three steps can be done through the single `easy_query` option, which can be invoked using the following command
+All these three steps can be done through the single `easy_query` option:
 ```bash
 concise easy_query --config-path configs/easy_query.yaml
 ```
 
-The arguments to the `easy_query` option is stored in a yaml file, whose contents are described below:
+The arguments to the `easy_query` option is stored in a yaml file, described below:
 ```
 # 1. fasta_file: the path to the fasta file
 fasta_file: data/SwissProtMini/seqs.fasta
