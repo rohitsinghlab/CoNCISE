@@ -58,18 +58,15 @@
 <!-- GETTING STARTED -->
 ## Getting Started
 
-Currently CoNCISE is in closed access and does not have a pip wheel. We suggest installing it in a clean python environment with python >= 3.12.
-
-
 ### Installation
 
+Using `pip`:
 ```
-pip install concise
+pip install concise_dti
 ```
 
 
-Install from source
-
+Install from source:
 ```bash
 pip install .
 ```
