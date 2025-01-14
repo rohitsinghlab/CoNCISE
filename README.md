@@ -76,7 +76,7 @@ pip install .
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-CoNCISE achieves extremely fast Drug-Target Interaction (DTI) prediction by discretizing the vast space of small molecules into $32^3 = 32768$ discrete, hierarchically organized codes representation, requiring only the SMILES molecular representation as input in the process. 
+CoNCISE achieves extremely fast Drug-Target Interaction (DTI) prediction by discretizing the vast space of small molecules into 32^3 = 32768 discrete, hierarchically organized codes representation, requiring only the SMILES molecular representation as input in the process. 
 The CoNCISE DTI pipeline consists of the following three steps:
 1. Use CoNCISE ligand module to convert the ligand SMILES representation to discrete codes.
 2. Take any protein and find its binding affinity against all $32^3$ possible codes (figure 2 above).
