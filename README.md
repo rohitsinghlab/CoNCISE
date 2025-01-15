@@ -35,6 +35,8 @@
   </p>
 </div>
 
+Visit the CoNCISE website: [concise.singhlab.net](https://concise.singhlab.net).
+
 ![method](method.svg)
 
 <!-- TABLE OF CONTENTS -->
