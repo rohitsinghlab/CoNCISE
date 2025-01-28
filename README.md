@@ -144,18 +144,18 @@ ligand_dataset:
 
 **Data Availability and Download** 
 
-The relevent datasetes are provided in the `data` folder. Additionally, they could also be downloaded using the option:
+The relevant datasets are provided in the `data` folder. Additionally, they could also be downloaded using the option:
 ```
 concise download [DOWNLOAD_PATH]
 ```
 
-*Note: this is only reccomended if you don't intend on repeated queries as intermediate results are not saved.*
+*Note: this is only recommended if you don't intend on repeated queries as intermediate results are not saved.*
 
 ___
 
 ### Advanced Usage
 
-The tree steps in the CoNCISE pipeline could also be separately performed using the addtional options included in the CoNCISE package. We describe them in order below.
+The three steps in the CoNCISE pipeline could also be separately performed using the addtional options included in the CoNCISE package. We describe them in order below.
 
 1. Converting SMILES to Codes using `smiles_to_codes`
    
