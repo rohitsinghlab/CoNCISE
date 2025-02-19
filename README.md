@@ -62,11 +62,14 @@ Visit the CoNCISE website: [concise.singhlab.net](https://concise.singhlab.net).
 
 ### Installation
 
-Using `pip`:
+To install the latest and greatest version of CoNCISE, use the following command:
+```
+pip install git+https://github.com/rohitsinghlab/CoNCISE.git
+```
+If you want to install the release version from pipy, use the command:
 ```
 pip install concise_dti
 ```
-
 
 Install from source:
 ```bash
