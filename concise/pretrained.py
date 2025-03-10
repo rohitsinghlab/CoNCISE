@@ -1,6 +1,4 @@
 import torch
 
-
-
-def concise_moodeng():
-    return torch.hub.load("rohitsinghlab/CoNCISE", "pretrained_concise_v1", pretrained=True)
+def concise_moodeng(version = "pretrained_concise_v2"):
+    return torch.hub.load("rohitsinghlab/CoNCISE", version, pretrained=True)
