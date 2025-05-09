@@ -37,6 +37,30 @@
 
 Visit the CoNCISE website: [concise.singhlab.net](https://concise.singhlab.net).
 
+## Biorxiv
+https://www.biorxiv.org/content/10.1101/2025.01.08.632039v1
+
+## Database location
+
+The original Moodeng dataset used in the CoNCISE paper, and the new extended MoodengDB dataset with significantly more entries are available for download at Zenodo: https://zenodo.org/records/15368729
+
+## Citing CoNCISE
+
+```
+@article {Erden2025.01.08.632039,
+	author = {Erden, Mert and Devkota, Kapil and Varghese, Lia and Cowen, Lenore and Singh, Rohit},
+	title = {Learning a CoNCISE language for small-molecule binding},
+	elocation-id = {2025.01.08.632039},
+	year = {2025},
+	doi = {10.1101/2025.01.08.632039},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {Rapid advances in deep learning have improved in silico methods for drug-target interaction (DTI) prediction. However, current methods do not scale to the massive catalogs that list millions or billions of commercially-available small molecules. Here, we introduce CoNCISE, a method that accelerates drug-target interaction (DTI) prediction by 2-3 orders of magnitude while maintaining high accuracy. CoNCISE uses a novel vector-quantized codebook approach and a residual-learning based training of hierarchical codes. Strikingly, we find that much of binding-specificity information in the small molecule space can be compressed into just 15 bits of information per compound, characterizing all small molecules into 32,768 hierarchically-organized binding categories. Our DTI architecture, which combines these compact ligand representations with fixed-length protein embeddings in a cross-attention framework, achieves state-of-the-art prediction accuracy at unprecedented speed. We demonstrate CoNCISE{\textquoteright}s practical utility by indexing 6.4 billion ligands in the Enamine dataset, enabling researchers to query vast chemical libraries against a protein target in seconds. A {\textquotedblleft}CoNCISE + docking{\textquotedblright} pipeline screened Enamine to propose strong binders (predicted KD ≈ 10-20 {\textmu}M) of three difficult-to-drug targets, each within two hours. CoNCISE{\textquoteright}s advance could democratize access to largescale computational drug discovery, potentially enabling rapid identification of promising molecules for therapeutic targets and cellular perturbations.Competing Interest StatementM.E., K.D., L.C., and R.S. have filed patents related to this work with provisional patent ($\#$63/735,991).},
+	URL = {https://www.biorxiv.org/content/early/2025/01/13/2025.01.08.632039},
+	eprint = {https://www.biorxiv.org/content/early/2025/01/13/2025.01.08.632039.full.pdf},
+	journal = {bioRxiv}
+}
+```
+
 ![method](method.svg)
 
 <!-- TABLE OF CONTENTS -->
