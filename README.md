@@ -40,7 +40,7 @@ Visit the CoNCISE website: [concise.singhlab.net](https://concise.singhlab.net).
 ![method](method.svg)
 
 ## Biorxiv
-https://www.biorxiv.org/content/10.1101/2025.01.08.632039v1
+https://www.biorxiv.org/content/10.1101/2025.01.08.632039
 
 ## Database location
 
