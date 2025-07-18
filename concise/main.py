@@ -4,6 +4,7 @@ from .commands import (
     run_smiles_to_codes,
     run_query,
     run_easy_query,
+    run_easy_query2,
     run_download,
 )
 
@@ -26,6 +27,7 @@ app.command("proteins_to_codes")(run_protein_code_assignment)
 app.command("smiles_to_codes")(run_smiles_to_codes)
 app.command("query")(run_query)
 app.command("easy_query")(run_easy_query)
+app.command("easy_query2")(run_easy_query2)
 app.command("download")(run_download)
 
 if __name__ == "__main__":
