@@ -39,6 +39,7 @@ def main():
 def score(protein, ligands, config_path=DEFAULT_CONFIG_PATH):
     from yaml import safe_load, safe_dump
 
+    print("FLAG 67: changed code", __file__)
     @atexit.register
     def cleanup_tempdir():
         tempdir = Path(TEMPDIR_NAME) / "easy_query_temp"
