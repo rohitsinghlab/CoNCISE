@@ -155,7 +155,10 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
     )
     score_df = pd.DataFrame(score_data)
 
-    print("FLAG 68: score_df:", score_df, __file__)
+    # return empty dataframe if no results
+    if len(score_df) == 0:
+        merge_df = pd.DataFrame({'SMILES': [], 'Score': [], 'Code': []})
+        return merge_df
 
     # conn = sqlite3.connect(":memory:")
     # smiles_codes.to_sql("codes", conn, index=False)
