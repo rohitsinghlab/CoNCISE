@@ -33,7 +33,8 @@ def main():
     protein = str(SeqIO.read(StringIO(handle.text), 'fasta').seq)
     ligands = ["CCC\C=C\C=C\C(=O)O[C@H]1\C(C[C@H]2C[C@@H](OC(=O)C[C@H](O)C[C@@H]3C[C@H](OC(C)=O)C(C)(C)[C@](O)(C[C@@H]4C\C(C[C@@H](O4)\C=C\C(C)(C)[C@]1(O)O2)=C\C(=O)OC)O3)[C@@H](C)O)=C\C(=O)OC",  
             "N[C@@H](CCC(=O)N[C@@H](CS)C(=O)NCC(O)=O)C(O)=O"]
-    score(protein, ligands)
+    df = score(protein, ligands)
+    print(df)
 
 
 def score(protein, ligands, config_path=DEFAULT_CONFIG_PATH):
@@ -84,8 +85,7 @@ def score(protein, ligands, config_path=DEFAULT_CONFIG_PATH):
     temp_ligand_file.parent.mkdir(parents=True, exist_ok=True)
     ligands_df.to_csv(temp_ligand_file, index=False)
 
-    
-    main2(config_path)
+    return main2(config_path)
 
 
 def main2(config_path: Path = typer.Option(..., help="Path to config file")):
@@ -99,6 +99,11 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
     cfg = OmegaConf.to_container(cfg, resolve=True)
 
     logger.info("Loading the model")
+
+    # set device 
+    print("---> WARNING: DEVICE HARD-CODED TO CPU:", __file__)
+    device = 'cpu' # hydra.utils.instantiate(cfg["device"])
+
     model = concise_moodeng()
 
     # if the h5 files are not present, create it
@@ -109,7 +114,7 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
         seqs = list(SeqIO.parse(cfg["fasta_file"], "fasta"))
         all_seqs = list(set([str(x.seq) for x in seqs]))
         receptor_path = cfg["rec_embed_file"]
-        construct_receptor_h5(all_seqs, receptor_path)
+        construct_receptor_h5(all_seqs, receptor_path, device=device)
     if create_ligand_emb:
         smiles = pd.read_csv(cfg["ligand_file"])["SMILES"]
         ligand_path = cfg["lig_embed_file"]
@@ -119,7 +124,6 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
 
     protein_dataloader = hydra.utils.instantiate(cfg["protein_dataset"]["protein_dataloader"])
     ligand_dataloader = hydra.utils.instantiate(cfg["ligand_dataset"]["ligand_dataloader"])
-    device = hydra.utils.instantiate(cfg["device"])
 
     model.to(device)
     protein_scores = score_proteins(model, protein_dataloader, device)
@@ -130,6 +134,7 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
     for idx, (score, combination) in enumerate(protein_scores):
         for i in range(len(score)):
             binding_score = score[i].item()
+            # --- not filtering for this application ---
             # if binding_score < 0.5:
                 # continue
             score_data.append(
@@ -154,23 +159,10 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
     )
     score_df = pd.DataFrame(score_data)
 
-    # conn = sqlite3.connect(":memory:")
-    # smiles_codes.to_sql("codes", conn, index=False)
-    # score_df.to_sql("protein_scores", conn, index=False)
-
     score_df['Code'] = score_df['Code'].astype(str)
     smiles_codes['Code'] = smiles_codes['Code'].astype(str)
     merge_df = score_df.merge(smiles_codes, on='Code', how='inner')
     return merge_df
-
-    # try:
-        # results_df = get_top_codes_and_smiles(conn, cfg["num_codes_per_protein"], cfg["num_smiles_per_code"])
-        # save_path = Path(cfg["save_path"])
-        # save_path.parent.mkdir(parents=True, exist_ok=True)
-        # results_df.to_csv(save_path, index=False)
-        
-    # finally:
-        # conn.close()
 
 
 if __name__ == "__main__":
