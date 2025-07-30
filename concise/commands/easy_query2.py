@@ -1,184 +1,200 @@
 
-import typer
-import hydra
 import os
-import logging
-import pandas as pd
 import sqlite3
-from Bio import SeqIO
-from Bio import Seq
-from Bio import SeqRecord
-from pathlib import Path
-from omegaconf import OmegaConf
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-import tempfile 
-import shutil 
-import atexit
-
-# --- temporary directory handling ---
-from ..configs import get_config_path
-DEFAULT_CONFIG_PATH = get_config_path("easy_query2.yaml")
-TEMPDIR_NAME = tempfile.gettempdir()
-print(f"Using the following temporary directory for easy_query: {TEMPDIR_NAME}")
-
-# default device 
+import subprocess
+import tempfile
+import pandas as pd
+import concise.pretrained
+import numpy as np
+import json
+import einops 
 import torch
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+from torch.utils.data import DataLoader
+
+from typing import List, Tuple, Dict, Any
+from Bio import SeqIO
+
+# concise-specific imports
+from ..pretrained import concise_moodeng
+from ..dataset import construct_receptor_h5
+from ..dataset import LigandDataset, ScoreDataset
+from ..dataset import get_fingerprints
+
+from .protein_to_codes import score_proteins
+
+MODEL = None
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def main():
-    url = f'https://rest.uniprot.org/uniprotkb/P31946.fasta'
-    import requests 
-    from io import StringIO
-    handle = requests.get(url)
-    protein = str(SeqIO.read(StringIO(handle.text), 'fasta').seq)
-    ligands = ["CCC\C=C\C=C\C(=O)O[C@H]1\C(C[C@H]2C[C@@H](OC(=O)C[C@H](O)C[C@@H]3C[C@H](OC(C)=O)C(C)(C)[C@](O)(C[C@@H]4C\C(C[C@@H](O4)\C=C\C(C)(C)[C@]1(O)O2)=C\C(=O)OC)O3)[C@@H](C)O)=C\C(=O)OC",  
-            "N[C@@H](CCC(=O)N[C@@H](CS)C(=O)NCC(O)=O)C(O)=O"]
-    df = score(protein, ligands)
-    print(df)
+    smiles = [
+        "CCC\C=C\C=C\C(=O)O[C@H]1\C(C[C@H]2C[C@@H](OC(=O)C[C@H](O)C[C@@H]3C[C@H](OC(C)=O)C(C)(C)[C@](O)(C[C@@H]4C\C(C[C@@H](O4)\C=C\C(C)(C)[C@]1(O)O2)=C\C(=O)OC)O3)[C@@H](C)O)=C\C(=O)OC",
+        "N[C@@H](CCC(=O)N[C@@H](CS)C(=O)NCC(O)=O)C(O)=O"
+    ]
+
+    protein  = "MTMDKSELVQKAKLAEQAERYDDMAAAMKAVTEQGHELSNEERNLLSVAYKNVVGARRSSWRVISSIEQKTERNEKKQQMGKEYREKIEAELQDICNDVLELLDKYLIPNATQPESKVFYLKMKGDYFRYLSEVASGDNKQTTVSNSQQAYQEAFEISKKEMQPTHPIRLGLALNFSVFYYEILNSPEKACSLAKTAFDEAIAELDTLNEESYKDSTLIMQLLRDNLTLWTSENQGDEGDAGEGEN"
+
+    print(score_protein(protein, smiles))
+    
 
 
-def score(protein, ligands, device=DEVICE, config_path=DEFAULT_CONFIG_PATH):
-    from yaml import safe_load, safe_dump
+def score_protein(protein, ligands, device=None, model=None):
+    if device is None:
+        device = torch.device(DEVICE)
+    if model is None:
+        model = load_model(device)
 
-    print("FLAG 67: changed code", __file__)
-    @atexit.register
-    def cleanup_tempdir():
-        tempdir = Path(TEMPDIR_NAME) / "easy_query_temp"
-        if tempdir.exists():
-            print(f"Cleaning up temporary directory: {tempdir}")
-            shutil.rmtree(tempdir)
+    smiles2codes = smiles_to_codes(ligands, model, device)
+    codes = grab_codes(protein, device=device, threshold=0.0)
+
+    codes2smiles = {}
+    for smiles, code in smiles2codes.items():
+        if code in codes2smiles:
+            codes2smiles[code].append(smiles)
         else:
-            print(f"No temporary directory found at: {tempdir}")
+            codes2smiles[code] = [smiles]
+
+    # output dataset 
+    out = []
+    for code, score in codes:
+        if code in codes2smiles:
+            for smiles in codes2smiles[code]:
+                out.append({"smiles": smiles, "concise_code": code, "score": score})
     
-    
-    def create_tempdir():
-        tempdir = Path(TEMPDIR_NAME) / "easy_query_temp"
-        if not tempdir.exists():
-            tempdir.mkdir(parents=True, exist_ok=True)
-        return tempdir
+    if len(out) == 0:
+        return pd.DataFrame(columns=["smiles", "concise_code", "score"])
+    else:
+        out = pd.DataFrame(out)
+        out = out.sort_values(by="score", ascending=False).reset_index(drop=True)
 
-    # change default config to use a temporary file 
-    with open(config_path, 'r') as f:
-        cfg = safe_load(f)
-    for key, value in cfg['paths'].items():
-        cfg[key] = str(create_tempdir() / value)
-    # set device 
-    cfg['device']['device'] = device
-    config_path = create_tempdir() / "easy_query_temp.yaml"
-    with open(config_path, 'w') as f:
-        safe_dump(cfg, f)
-    print("config_path", config_path)
-    print("cfg", cfg)
+    return out
 
 
-    # --- create the necessary temporary files  ---
-    # protein
-    seq = SeqRecord.SeqRecord(
-        Seq.Seq(protein),
-        id="user_protein",
-        description="Temporary protein sequence for scoring"
-    )
-    temp_protein_file = create_tempdir() / cfg["fasta_file"]
-    temp_protein_file.parent.mkdir(parents=True, exist_ok=True)
-    SeqIO.write(seq, temp_protein_file, "fasta")
-
-    # ligands
-    ligands_df = pd.DataFrame({"SMILES": ligands})
-    temp_ligand_file = create_tempdir() / cfg["ligand_file"]
-    temp_ligand_file.parent.mkdir(parents=True, exist_ok=True)
-    ligands_df.to_csv(temp_ligand_file, index=False)
-
-    return main2(config_path)
+# --- function to map smiles to codes ---
+def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str]:
+    """
+    Given a list of SMILES strings, returns a dictionary mapping each SMILES to its corresponding code.
+    """
+    if device is None:
+        device = torch.device(DEVICE)
+    valid_features, valid_ids = get_fingerprints(smiles)
+    codes = model.codes(torch.tensor(valid_features).to(device))
+    smiles2codes = {}
+    for i in range(len(valid_ids)):
+        drug = smiles[valid_ids[i]]
+        code = "-".join([str(x) for x in codes[i].cpu().numpy().tolist()])
+        smiles2codes[drug] = code
+    return smiles2codes
 
 
-def main2(config_path: Path = typer.Option(..., help="Path to config file")):
-    from concise.dataset import construct_receptor_h5, construct_ligand_h5
-    from concise.pretrained import concise_moodeng
-    from .protein_to_codes import score_proteins
-    from .smiles_to_codes import assign_codes
-    from .query import get_top_codes_and_smiles, process_results
-
-    cfg = OmegaConf.load(config_path)
-    cfg = OmegaConf.to_container(cfg, resolve=True)
-
-    logger.info("Loading the model")
-
-    # set device 
-    device = hydra.utils.instantiate(cfg["device"])
-
-    model = concise_moodeng()
-
-    # if the h5 files are not present, create it
-    create_receptor_emb = not os.path.exists(cfg["protein_dataset"]["rec_embed_file"])
-    create_ligand_emb = not os.path.exists(cfg["ligand_dataset"]["lig_embed_file"])
-
-    if create_receptor_emb:
-        seqs = list(SeqIO.parse(cfg["fasta_file"], "fasta"))
-        all_seqs = list(set([str(x.seq) for x in seqs]))
-        receptor_path = cfg["rec_embed_file"]
-        construct_receptor_h5(all_seqs, receptor_path, device=device)
-    if create_ligand_emb:
-        smiles = pd.read_csv(cfg["ligand_file"])["SMILES"]
-        ligand_path = cfg["lig_embed_file"]
-        construct_ligand_h5(smiles, ligand_path)
-
-    logger.info("Loading the fasta dataloader.")
-
-    protein_dataloader = hydra.utils.instantiate(cfg["protein_dataset"]["protein_dataloader"])
-    ligand_dataloader = hydra.utils.instantiate(cfg["ligand_dataset"]["ligand_dataloader"])
-
-    model.to(device)
-    protein_scores = score_proteins(model, protein_dataloader, device)
-    ligand_scores = assign_codes(model, ligand_dataloader, device)
-    dataset = hydra.utils.instantiate(cfg["protein_dataset"]["protein_dataset"]).seqdata
-
-    score_data = []
-    for idx, (score, combination) in enumerate(protein_scores):
-        for i in range(len(score)):
-            binding_score = score[i].item()
-            # --- not filtering for this application ---
-            # if binding_score < 0.5:
-                # continue
-            score_data.append(
-                {
-                    "ID": str(dataset[idx].id),
-                    "Code": "-".join([str(x) for x in combination[i].tolist()]),
-                    "Score": binding_score,
-                }
-            )
-
-    dataset = hydra.utils.instantiate(cfg["ligand_dataset"]["ligand_dataset"])
-    ligand_scores = ligand_scores.cpu().detach().numpy().tolist()
-    ligand_scores = ["-".join([str(x) for x in code]) for code in ligand_scores]
-
-    # match smiles to codes
-    smiles = dataset.ligands
-    smiles_codes = pd.DataFrame(
-        {
-            "SMILES": smiles,
-            "Code": ligand_scores,
-        }
-    )
-    score_df = pd.DataFrame(score_data)
-
-    # return empty dataframe if no results
-    if len(score_df) == 0:
-        merge_df = pd.DataFrame({'SMILES': [], 'Score': [], 'Code': []})
-        return merge_df
-
-    # conn = sqlite3.connect(":memory:")
-    # smiles_codes.to_sql("codes", conn, index=False)
-    # score_df.to_sql("protein_scores", conn, index=False)
-
-    score_df['Code'] = score_df['Code'].astype(str)
-    smiles_codes['Code'] = smiles_codes['Code'].astype(str)
-    merge_df = score_df.merge(smiles_codes, on='Code', how='inner')
-    return merge_df
+# --- helper functions ---
+def pack3_32(tok1, tok2, tok3):
+    alltoks = [tok1, tok2, tok3]
+    assert max(alltoks) < 32 and min(alltoks) >= 0
+    return np.uint16(tok1 << 10 | tok2 << 5 | tok3)
 
 
-if __name__ == "__main__":
+def grab_codes(protein: str, device: str, threshold: float = 0.0) -> List[Tuple[str, float]]:
+    """
+    given a protein will return a list of codes that binds to that protein.
+    """
+    model = concise_moodeng().eval().to(device)
+    # Create temporary files for processing
+    with tempfile.NamedTemporaryFile(
+        mode="w", delete=False
+    ) as tf1, tempfile.NamedTemporaryFile(mode="w", delete=False) as tf2:
+
+        # Process the ligand
+        construct_receptor_h5([protein], tf1.name)
+        pd.DataFrame({"Target Sequence": [protein]}).to_csv(tf2.name)
+        dataset = ScoreDataset(tf2.name, tf1.name)
+        dl = DataLoader(dataset, batch_size=1)
+
+        print(concise.pretrained.__file__)
+        scores = score_proteins(model, dl, device)
+
+        if len(scores) == 0:
+            return list()
+
+        scores = [
+            ("-".join(map(str, code.tolist())), score.item())
+            for (score, code) in zip(*scores[0])
+        ]
+
+        scores = [(code, score) for code, score in scores if score > threshold]
+
+    return scores
+
+
+def codes_to_smiles(codes: List[Tuple[str, float, str]], db_path: str, csv_outpath: str) -> None:
+    """
+    Given a list of codes and their corresponding sequences, a database and an output path.
+    Will populate csv with smiles and sequences.
+    """
+    import duckdb
+
+    # handle case where no codes are there
+    if len(codes) == 0:
+        df = pd.DataFrame(columns=["smiles", "id", "code", "score", "sequence"])
+        df.to_csv(csv_output, index=False)
+        return df
+
+    # extra code added in
+    # since we want a map from integer representation of code to the score
+    codes_to_search = [(pack3_32(*[int(c) for c in code.split("-")]), score) for code, score, _ in codes]
+    codes_to_search = [(int(code), score) for code, score in codes_to_search]
+    code2score = {code: score for code, score in codes_to_search}
+    codes_to_search = [code for code, _ in codes_to_search]
+
+    query = f"""
+    SELECT smiles, id, code
+    FROM sqlite_scan('{db_path}', 'smiles_codes')
+    WHERE code IN ({','.join(map(str, codes_to_search))})
+    """
+
+    # Connect to DuckDB (in-memory by default)
+    con = duckdb.connect()
+
+    # Execute query and fetch results
+    result = con.execute(query).fetchall()
+
+    # Create a DataFrame to store the results along with sequences
+    df = pd.DataFrame(result, columns=["smiles", "id", "code"])
+
+    # Create the sequence column
+    seq = codes[0][2]
+    assert all(code[2] == seq for code in codes)
+    df["sequence"] = seq
+
+    # Create the score column
+    df.insert(3, "score", df["code"].apply(lambda s: code2score.get(s)))
+
+    # Write the DataFrame to CSV
+    df.to_csv(csv_outpath, index=False)
+
+
+def process_proteins(fasta_path: str, db_path: str, csv_outpath: str, device: str, threshold: float) -> None:
+    """
+    Processes proteins in a FASTA file by grabbing the associated codes
+    and converting them to SMILES, writing the results to a CSV.
+    """
+    all_codes = []
+    for record in SeqIO.parse(fasta_path, "fasta"):
+        protein = str(record.seq)
+        code_score_pairs = grab_codes(protein, device, threshold)
+        codes = [(code, score, protein) for code, score in code_score_pairs]
+        all_codes.extend(codes)
+    codes_to_smiles(all_codes, db_path, csv_outpath)
+
+
+def load_model(device: str = None):
+    if device is None:
+        device = torch.device(DEVICE)
+    global MODEL 
+    if MODEL is None:
+        MODEL = concise_moodeng().eval().to(device)
+    return MODEL
+
+
+if __name__ == "__main__":  
     main()
