@@ -38,7 +38,7 @@ def main():
     
 
 
-def score_protein(protein, ligands, device=None, model=None):
+def score(protein, ligands, device=None, model=None):
     if device is None:
         device = torch.device(DEVICE)
     if model is None:
