@@ -24,6 +24,10 @@ DEFAULT_CONFIG_PATH = get_config_path("easy_query2.yaml")
 TEMPDIR_NAME = tempfile.gettempdir()
 print(f"Using the following temporary directory for easy_query: {TEMPDIR_NAME}")
 
+# default device 
+import torch
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 def main():
     url = f'https://rest.uniprot.org/uniprotkb/P31946.fasta'
@@ -37,7 +41,7 @@ def main():
     print(df)
 
 
-def score(protein, ligands, config_path=DEFAULT_CONFIG_PATH):
+def score(protein, ligands, device=DEVICE, config_path=DEFAULT_CONFIG_PATH):
     from yaml import safe_load, safe_dump
 
     print("FLAG 67: changed code", __file__)
@@ -62,6 +66,8 @@ def score(protein, ligands, config_path=DEFAULT_CONFIG_PATH):
         cfg = safe_load(f)
     for key, value in cfg['paths'].items():
         cfg[key] = str(create_tempdir() / value)
+    # set device 
+    cfg['device']['device'] = device
     config_path = create_tempdir() / "easy_query_temp.yaml"
     with open(config_path, 'w') as f:
         safe_dump(cfg, f)
@@ -102,8 +108,7 @@ def main2(config_path: Path = typer.Option(..., help="Path to config file")):
     logger.info("Loading the model")
 
     # set device 
-    print("---> WARNING: DEVICE HARD-CODED TO CPU:", __file__)
-    device = 'cpu' # hydra.utils.instantiate(cfg["device"])
+    device = hydra.utils.instantiate(cfg["device"])
 
     model = concise_moodeng()
 
