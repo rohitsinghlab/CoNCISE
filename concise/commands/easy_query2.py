@@ -25,7 +25,7 @@ from .protein_to_codes import score_proteins
 MODEL = None
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
+# --- test ---
 def main():
     smiles = [
         "CCC\C=C\C=C\C(=O)O[C@H]1\C(C[C@H]2C[C@@H](OC(=O)C[C@H](O)C[C@@H]3C[C@H](OC(C)=O)C(C)(C)[C@](O)(C[C@@H]4C\C(C[C@@H](O4)\C=C\C(C)(C)[C@]1(O)O2)=C\C(=O)OC)O3)[C@@H](C)O)=C\C(=O)OC",
@@ -34,10 +34,10 @@ def main():
 
     protein  = "MTMDKSELVQKAKLAEQAERYDDMAAAMKAVTEQGHELSNEERNLLSVAYKNVVGARRSSWRVISSIEQKTERNEKKQQMGKEYREKIEAELQDICNDVLELLDKYLIPNATQPESKVFYLKMKGDYFRYLSEVASGDNKQTTVSNSQQAYQEAFEISKKEMQPTHPIRLGLALNFSVFYYEILNSPEKACSLAKTAFDEAIAELDTLNEESYKDSTLIMQLLRDNLTLWTSENQGDEGDAGEGEN"
 
-    print(score_protein(protein, smiles))
+    print(score(protein, smiles))
     
 
-
+# --- main scoring function ---
 def score(protein, ligands, device=None, model=None):
     if device is None:
         device = torch.device(DEVICE)
@@ -124,67 +124,6 @@ def grab_codes(protein: str, device: str, threshold: float = 0.0) -> List[Tuple[
         scores = [(code, score) for code, score in scores if score > threshold]
 
     return scores
-
-
-def codes_to_smiles(codes: List[Tuple[str, float, str]], db_path: str, csv_outpath: str) -> None:
-    """
-    Given a list of codes and their corresponding sequences, a database and an output path.
-    Will populate csv with smiles and sequences.
-    """
-    import duckdb
-
-    # handle case where no codes are there
-    if len(codes) == 0:
-        df = pd.DataFrame(columns=["smiles", "id", "code", "score", "sequence"])
-        df.to_csv(csv_output, index=False)
-        return df
-
-    # extra code added in
-    # since we want a map from integer representation of code to the score
-    codes_to_search = [(pack3_32(*[int(c) for c in code.split("-")]), score) for code, score, _ in codes]
-    codes_to_search = [(int(code), score) for code, score in codes_to_search]
-    code2score = {code: score for code, score in codes_to_search}
-    codes_to_search = [code for code, _ in codes_to_search]
-
-    query = f"""
-    SELECT smiles, id, code
-    FROM sqlite_scan('{db_path}', 'smiles_codes')
-    WHERE code IN ({','.join(map(str, codes_to_search))})
-    """
-
-    # Connect to DuckDB (in-memory by default)
-    con = duckdb.connect()
-
-    # Execute query and fetch results
-    result = con.execute(query).fetchall()
-
-    # Create a DataFrame to store the results along with sequences
-    df = pd.DataFrame(result, columns=["smiles", "id", "code"])
-
-    # Create the sequence column
-    seq = codes[0][2]
-    assert all(code[2] == seq for code in codes)
-    df["sequence"] = seq
-
-    # Create the score column
-    df.insert(3, "score", df["code"].apply(lambda s: code2score.get(s)))
-
-    # Write the DataFrame to CSV
-    df.to_csv(csv_outpath, index=False)
-
-
-def process_proteins(fasta_path: str, db_path: str, csv_outpath: str, device: str, threshold: float) -> None:
-    """
-    Processes proteins in a FASTA file by grabbing the associated codes
-    and converting them to SMILES, writing the results to a CSV.
-    """
-    all_codes = []
-    for record in SeqIO.parse(fasta_path, "fasta"):
-        protein = str(record.seq)
-        code_score_pairs = grab_codes(protein, device, threshold)
-        codes = [(code, score, protein) for code, score in code_score_pairs]
-        all_codes.extend(codes)
-    codes_to_smiles(all_codes, db_path, csv_outpath)
 
 
 def load_model(device: str = None):
