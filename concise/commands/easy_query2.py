@@ -63,9 +63,9 @@ def score_protein(protein, ligands, device=None, model=None):
     
     if len(out) == 0:
         return pd.DataFrame(columns=["smiles", "concise_code", "score"])
-    else:
-        out = pd.DataFrame(out)
-        out = out.sort_values(by="score", ascending=False).reset_index(drop=True)
+
+    out = pd.DataFrame(out)
+    out = out.sort_values(by="score", ascending=False).reset_index(drop=True)
 
     return out
 
