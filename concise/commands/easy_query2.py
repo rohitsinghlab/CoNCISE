@@ -1,5 +1,6 @@
 
 import os
+import sys
 import sqlite3
 import subprocess
 import tempfile
@@ -22,11 +23,67 @@ from ..dataset import get_fingerprints
 
 from .protein_to_codes import score_proteins
 
+# for command-line use
+import typer
+import traceback
+
 MODEL = None
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
+# --- main ---
+def main(
+        protein: str = typer.Option('', help="fasta file with protein sequences"),
+        drugs: str = typer.Option('', help="text file with drug smiles"),
+        output: str = typer.Option('', help="name of output file"),
+        device: str = typer.Option('', help="run predictions on GPU (`cuda`) or CPU (`cpu`)"),
+        test: bool = typer.Option(False, help="run test function")
+    ):
+    if test:
+        test_main()
+    else:
+        # error checking for specified fasta file
+        if not (protein and drugs and output):
+            if not protein:
+                typer.echo("❌ Missing required arguments. Provide the name of the protein fasta file using keyword --protein", err=False)
+            if not drugs:
+                typer.echo("❌ Missing required arguments. Provide the drugs as line-separated smiles text file using keyword --drugs", err=False)
+            if not output:
+                typer.echo("❌ Missing required arguments. Provide the name of the output file using keyword --output", err=False)
+            raise typer.Exit(code=1)
+        try:
+            # read in fasta sequences 
+            proteins = {r.description: str(r.seq) for r in SeqIO.parse(protein, 'fasta')}
+
+            # read in drugs 
+            smiles = set()
+            with open(drugs, 'r') as f:
+                for line in f:
+                    smiles.add(line.strip())
+            smiles = list(smiles)
+
+            print('device:', device)
+            # set device 
+            if not device:
+                device = torch.device(DEVICE)
+
+            # run all-vs-all prediction 
+            results = {}
+            for protein_id, protein in proteins.items():
+                result = score(protein, smiles, device)
+                if len(result) > 0:
+                    results[protein_id] = result
+
+            # merge predictions 
+            df_out = pd.concat(results, names=['protein'], ignore_index=False).reset_index(level=1, drop=True)
+            df_out.to_csv(output)
+        except Exception as e:
+            print(traceback.format_exc())
+            sys.exit(1)
+
+
 # --- test ---
-def main():
+def test_main():
     smiles = [
         "CCC\C=C\C=C\C(=O)O[C@H]1\C(C[C@H]2C[C@@H](OC(=O)C[C@H](O)C[C@@H]3C[C@H](OC(C)=O)C(C)(C)[C@](O)(C[C@@H]4C\C(C[C@@H](O4)\C=C\C(C)(C)[C@]1(O)O2)=C\C(=O)OC)O3)[C@@H](C)O)=C\C(=O)OC",
         "N[C@@H](CCC(=O)N[C@@H](CS)C(=O)NCC(O)=O)C(O)=O"
@@ -34,10 +91,29 @@ def main():
 
     protein  = "MTMDKSELVQKAKLAEQAERYDDMAAAMKAVTEQGHELSNEERNLLSVAYKNVVGARRSSWRVISSIEQKTERNEKKQQMGKEYREKIEAELQDICNDVLELLDKYLIPNATQPESKVFYLKMKGDYFRYLSEVASGDNKQTTVSNSQQAYQEAFEISKKEMQPTHPIRLGLALNFSVFYYEILNSPEKACSLAKTAFDEAIAELDTLNEESYKDSTLIMQLLRDNLTLWTSENQGDEGDAGEGEN"
 
-    print(score(protein, smiles))
+    import atexit 
+    protein_input = 'foo.fasta'
+    smiles_input = 'bar.txt'
+    atexit.register(lambda: os.remove(protein_input) if os.path.isfile(protein_input) else None)
+    atexit.register(lambda: os.remove(smiles_input) if os.path.isfile(smiles_input) else None)
+    with open(protein_input, 'w') as f:
+        f.write(f'>protein1\n{protein}\n')
+        f.write(f'>protein2\n{protein}\n')
+    with open(smiles_input, 'w') as f:
+        for smile in smiles:
+            f.write(f'{smile}\n')
+
+    output = 'test.easy_query2.txt'
+    atexit.register(lambda: os.remove(output) if os.path.isfile(output) else None)
+
+    import subprocess
+    subprocess.run(['concise', 'easy_query2', '--protein', protein_input, '--drugs', smiles_input, '--output', output])
+
+    with open('test.easy_query2.txt', 'r') as fout:
+        print(fout.read())
     
 
-# --- main scoring function ---
+# --- scoring function ---
 def score(protein, ligands, device=None, model=None):
     if device is None:
         device = torch.device(DEVICE)
@@ -133,7 +209,3 @@ def load_model(device: str = None):
     if MODEL is None:
         MODEL = concise_moodeng().eval().to(device)
     return MODEL
-
-
-if __name__ == "__main__":  
-    main()
