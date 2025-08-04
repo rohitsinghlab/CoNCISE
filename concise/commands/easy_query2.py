@@ -136,7 +136,12 @@ def score(protein, ligands, device=None, model=None):
         if code in codes2smiles:
             for smiles in codes2smiles[code]:
                 out.append({"smiles": smiles, "concise_code": code, "score": score})
-    
+
+    # output data for leftover ligands 
+    bad_ligands = set(ligands) - set(codes2smiles.keys())
+    for ligand in bad_ligands:
+        out.append({"smiles": ligand, "concise_code": smiles2codes.get(ligand, np.nan), "score": 0.0})
+
     if len(out) == 0:
         return pd.DataFrame(columns=["smiles", "concise_code", "score"])
 
