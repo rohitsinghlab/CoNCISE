@@ -195,7 +195,7 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
         smiles2embed[dataset_name] = feature
 
     # make a dataloader 
-    class dataset():
+    class datasetclass():
         def __init__(self, d):
             self.smiles = []
             self.embeds = []
@@ -210,7 +210,8 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
             return torch.tensor(self.embeds[index])
 
     # get codes 
-    dataloader = DataLoader(dataset(smiles2embed), shuffle=False, batch_size=1)
+    dataset = datasetclass(smiles2embed)
+    dataloader = DataLoader(dataset, shuffle=False, batch_size=1)
     all_codes = []
     for index, feature in enumerate(dataloader):
         codes = model.codes(feature.to(device))
@@ -219,7 +220,7 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
 
     # associate with smiles 
     smiles2codes = {}
-    for index, ligand in enumerate(dataloader.smiles):
+    for index, ligand in enumerate(dataset.smiles):
         smiles2codes[ligand] = all_codes[index]
 
     return smiles2codes
