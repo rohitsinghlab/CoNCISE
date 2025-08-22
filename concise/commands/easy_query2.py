@@ -158,13 +158,45 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
     """
     if device is None:
         device = torch.device(DEVICE)
+    smiles = sorted(set(smiles))
+
+    # create embeddings
     valid_features, valid_ids = get_fingerprints(smiles)
-    codes = model.codes(torch.tensor(valid_features).to(device))
+    smiles2embed = {}
+    for feature, index in zip(valid_features, valid_ids):
+        dataset_name = smiles[index].replace('/', '|')
+        if dataset_name in smiles2code:
+            continue
+        smiles[dataset_name] = feature
+
+    # make a dataloader 
+    class dataloaderclass():
+        def __init__(self, d):
+            self.smiles = []
+            self.embeds = []
+            for s, e in d.items():
+                self.smiles.append(s.replace('/', '|'))
+                self.embeds.append(e)
+
+        def __len__(self):
+            return len(self.smiles)
+
+        def __getitem__(self, index):
+            return torch.tensor(self.embeds[index])
+
+    # get codes 
+    dataloader = dataloaderclass(smiles2embed, shuffle=False, batch_size=1)
+    all_codes = []
+    for index, feature in tqdm(enumerate(dataloader), total=len(dataloader)):
+        codes = model.codes(feature.to(device))
+        all_codes.append(codes.cpu().detach())
+    all_codes = torch.cat(all_codes, dim=0)
+
+    # associate with smiles 
     smiles2codes = {}
-    for i in range(len(valid_ids)):
-        drug = smiles[valid_ids[i]]
-        code = "-".join([str(x) for x in codes[i].cpu().numpy().tolist()])
-        smiles2codes[drug] = code
+    for index, ligand in enumerate(dataloader.smiles):
+        smiles2codes[ligand] = all_codes[index]
+
     return smiles2codes
 
 
