@@ -212,7 +212,7 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
     # get codes 
     dataloader = DataLoader(dataset(smiles2embed), shuffle=False, batch_size=1)
     all_codes = []
-    for index, feature in tqdm(enumerate(dataloader), total=len(dataloader)):
+    for index, feature in enumerate(dataloader):
         codes = model.codes(feature.to(device))
         all_codes.append(codes.cpu().detach())
     all_codes = torch.cat(all_codes, dim=0)
