@@ -192,7 +192,7 @@ def smiles_to_codes(smiles: List[str], model: Any, device: str) -> Dict[str, str
         dataset_name = smiles[index].replace('/', '|')
         if dataset_name in smiles2embed:
             continue
-        smiles[dataset_name] = feature
+        smiles2embed[dataset_name] = feature
 
     # make a dataloader 
     class dataloaderclass():
