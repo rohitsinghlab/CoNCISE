@@ -119,49 +119,45 @@ class DTIDataset(Dataset):
 
     So, three inputs in total
     """
-
     def __init__(self, dti_file, rec_embed_file, lig_embed_file, mode="train"):
         self.mode = mode
+        self.rec_embed_file = rec_embed_file
+        self.lig_embed_file = lig_embed_file
+
         self.dtidata = pd.read_csv(dti_file)
         entrycolumns = ["Target Sequence", "SMILES"]
         if mode == "train":
             entrycolumns += ["Label"]
 
         self.dtidata = self.dtidata[entrycolumns]
-
-        self.ligand_embeddings = h5.File(lig_embed_file, "r")
-        available_ligands = set(self.ligand_embeddings.keys())
-
-        self.receptor_embeddings = h5.File(rec_embed_file, "r")
-        available_receptors = set(self.receptor_embeddings.keys())
-
         self.dtidata["SMILES"] = self.dtidata["SMILES"].apply(sanitize_string)
 
-        # remove the entries with no embeddings from dtidata
-        self.dtidata = self.dtidata.loc[
-            self.dtidata["SMILES"].apply(lambda x: x in available_ligands), :
-        ]
-        self.dtidata = self.dtidata.loc[
-            self.dtidata["Target Sequence"].apply(lambda x: x in available_receptors), :
-        ]
-        self.dtidata = self.dtidata.reset_index(drop=True)
-        return
+        with h5.File(lig_embed_file, "r") as ligf:
+            available_ligands = set(ligf.keys())
+        with h5.File(rec_embed_file, "r") as recf:
+            available_receptors = set(recf.keys())
+
+        self.dtidata = self.dtidata[
+            self.dtidata["SMILES"].isin(available_ligands) &
+            self.dtidata["Target Sequence"].isin(available_receptors)
+        ].reset_index(drop=True)
 
     def __len__(self):
         return len(self.dtidata)
 
     def __getitem__(self, idx):
         import torch
-        package = self.dtidata.loc[idx, :].values
-        if self.mode == "train":
-            receptor, ligand, label = package
-        else:
-            receptor, ligand = package
+        row = self.dtidata.iloc[idx]
+        receptor = row["Target Sequence"]
+        ligand = row["SMILES"]
 
-        rec_emb = torch.tensor(self.receptor_embeddings[receptor][:])
-        lig_emb = torch.tensor(self.ligand_embeddings[ligand][:])
+        with h5.File(self.rec_embed_file, "r") as recf:
+            rec_emb = torch.tensor(recf[receptor][:])
+        with h5.File(self.lig_embed_file, "r") as ligf:
+            lig_emb = torch.tensor(ligf[ligand][:])
 
         if self.mode == "train":
+            label = row["Label"]
             return rec_emb, lig_emb, torch.tensor(label, dtype=torch.long), idx
         else:
             return rec_emb, lig_emb
@@ -169,15 +165,13 @@ class DTIDataset(Dataset):
 
 class LigandDataset(Dataset):
     def __init__(self, lig_file, lig_embed_file):
-        self.ligand_embeddings = h5.File(lig_embed_file, "r")
+        self.lig_embed_file = lig_embed_file
         self.ligands = pd.read_csv(lig_file)["SMILES"].apply(sanitize_string)
-        available_ligands = set(self.ligand_embeddings.keys())
-        self.ligands = self.ligands.loc[
-            self.ligands.apply(lambda x: x in available_ligands)
-        ]
-        self.ligands = self.ligands.drop_duplicates()
-        self.ligands = self.ligands.reset_index(drop=True)
-        return
+
+        with h5.File(lig_embed_file, "r") as ligf:
+            available = set(ligf.keys())
+
+        self.ligands = self.ligands[self.ligands.isin(available)].drop_duplicates().reset_index(drop=True)
 
     def __len__(self):
         return len(self.ligands)
@@ -185,45 +179,29 @@ class LigandDataset(Dataset):
     def __getitem__(self, idx):
         import torch
         ligand = self.ligands[idx]
-        lig_emb = torch.tensor(self.ligand_embeddings[ligand][:])
-        return lig_emb
+        with h5.File(self.lig_embed_file, "r") as f:
+            return torch.tensor(f[ligand][:])
+
 
 
 class ScoreDataset(Dataset):
-    """
-    Takes in a TSV file with entries: `seq`, `lig`, (`0/1` if train else Nothing)
-
-    for `seq` you input a h5 file that contains the raygun repr of dim: 1, 50, 1280
-    for `lig` you have a h5 file that contains the morgan fingerprint of dim: 1, 2048
-
-    So, three inputs in total
-    """
-
     def __init__(self, recep, rec_embed_file):
-        self.dtidata = pd.read_csv(recep)
-        entrycolumns = ["Target Sequence"]
+        self.rec_embed_file = rec_embed_file
+        self.dtidata = pd.read_csv(recep)[["Target Sequence"]]
 
-        self.dtidata = self.dtidata[entrycolumns]
+        with h5.File(rec_embed_file, "r") as recf:
+            available = set(recf.keys())
 
-        self.receptor_embeddings = h5.File(rec_embed_file, "r")
-        available_receptors = set(self.receptor_embeddings.keys())
-
-        self.dtidata = self.dtidata.loc[
-            self.dtidata["Target Sequence"].apply(lambda x: x in available_receptors), :
-        ]
-        self.dtidata = self.dtidata.reset_index(drop=True)
-        return
+        self.dtidata = self.dtidata[self.dtidata["Target Sequence"].isin(available)].reset_index(drop=True)
 
     def __len__(self):
         return len(self.dtidata)
 
     def __getitem__(self, idx):
         import torch
-        receptor = self.dtidata["Target Sequence"][idx]
-
-        rec_emb = torch.tensor(self.receptor_embeddings[receptor][:])
-
-        return rec_emb
+        receptor = self.dtidata.loc[idx, "Target Sequence"]
+        with h5.File(self.rec_embed_file, "r") as f:
+            return torch.tensor(f[receptor][:])
 
 
 class ScoreFastaDataset(Dataset):
@@ -235,19 +213,16 @@ class ScoreFastaDataset(Dataset):
 
     So, three inputs in total
     """
-
     def __init__(self, fasta_file, rec_embed_file, max_entries=-1):
         from Bio import SeqIO
-
+        self.rec_embed_file = rec_embed_file
         self.seqdata = list(SeqIO.parse(fasta_file, "fasta"))
         if max_entries > 0:
             self.seqdata = self.seqdata[:max_entries]
 
-        self.receptor_embeddings = h5.File(rec_embed_file, "r")
-        available_receptors = set(self.receptor_embeddings.keys())
-        self.seqdata = [x for x in self.seqdata if str(x.seq) in available_receptors]
-
-        return
+        with h5.File(rec_embed_file, "r") as f:
+            available = set(f.keys())
+        self.seqdata = [x for x in self.seqdata if str(x.seq) in available]
 
     def __len__(self):
         return len(self.seqdata)
@@ -255,7 +230,6 @@ class ScoreFastaDataset(Dataset):
     def __getitem__(self, idx):
         import torch
         receptor = str(self.seqdata[idx].seq)
+        with h5.File(self.rec_embed_file, "r") as f:
+            return torch.tensor(f[receptor][:])
 
-        rec_emb = torch.tensor(self.receptor_embeddings[receptor][:])
-
-        return rec_emb
